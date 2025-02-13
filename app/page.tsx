@@ -1,101 +1,212 @@
-import Image from "next/image";
+'use client'
+import { Button, Input } from '@heroui/react';
+import { useState, useEffect, useRef } from 'react';
+import { Web3 } from 'web3';
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [web3, setWeb3] = useState<Web3 | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [provider, setProvider] = useState<string | null>(null);
+  const [chainId, setChainId] = useState<string | null>(null);
+  const [latestBlock, setLatestBlock] = useState<string | null>(null);
+  const [accountButtonDisabled, setAccountButtonDisabled] = useState<boolean>(false);
+  const [accounts, setAccounts] = useState<string[] | null>(null);
+  const [connectedAccount, setConnectedAccount] = useState<string | null>(null);
+  const [messageToSign, setMessageToSign] = useState<string | null>(null);
+  const [signingResult, setSigningResult] = useState<string | null>(null);
+  const [originalMessage, setOriginalMessage] = useState<string | null>(null);
+  const [signedMessage, setSignedMessage] = useState<string | null>(null);
+  const [signingAccount, setSigningAccount] = useState<string | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+  useEffect(() => {
+    // ensure that there is an injected the Ethereum provider
+    if (window.ethereum) {
+      // use the injected Ethereum provider to initialize Web3.js
+      setWeb3(new Web3(window.ethereum));
+      // check if Ethereum provider comes from MetaMask
+      if (window.ethereum.isMetaMask) {
+        setProvider('Connected to Ethereum with MetaMask.');
+      } else {
+        setProvider('Non-MetaMask Ethereum provider detected.');
+      }
+    } else {
+      // no Ethereum provider - instruct user to install MetaMask
+      setAccountButtonDisabled(true);
+      setWarning('Please install MetaMask');
+    }
+  }, []);
+
+  useEffect(() => {
+    async function getChainId() {
+      if (web3 === null) {
+        return;
+      }
+
+      // get chain ID and populate placeholder
+      setChainId(`Chain ID: ${await web3.eth.getChainId()}`);
+    }
+
+    async function getLatestBlock() {
+      if (web3 === null) {
+        return;
+      }
+
+      // get latest block and populate placeholder
+      setLatestBlock(`Latest Block: ${await web3.eth.getBlockNumber()}`);
+
+      // subscribe to new blocks and update UI when a new block is created
+      const blockSubscription = await web3.eth.subscribe('newBlockHeaders');
+      blockSubscription.on('data', block => {
+        setLatestBlock(`Latest Block: ${block.number}`);
+      });
+    }
+
+    getChainId();
+    getLatestBlock();
+  }, [web3]);
+
+
+  // click event for "Request MetaMask Accounts" button
+  async function requestAccounts() {
+    if (web3 === null) {
+      return;
+    }
+
+    // request accounts from MetaMask
+    await window.ethereum.request({ method: 'eth_requestAccounts' });
+    document.getElementById('requestAccounts')?.remove();
+
+    // get list of accounts
+    const allAccounts = await web3.eth.getAccounts();
+    setAccounts(allAccounts);
+    console.log('allAccounts:', allAccounts)
+    // get the first account and populate placeholder
+    setConnectedAccount(`${allAccounts[0]}`);
+  }
+
+
+  // click event for "Sign Message" button
+  async function signMessage() {
+    if (web3 === null || accounts === null || messageToSign === null) {
+      return;
+    }
+
+    // sign message with first MetaMask account
+    const signature = await web3.eth.personal.sign(messageToSign, accounts[0], '');
+
+    setSigningResult(signature);
+  }
+
+  // click event for "Recover Account" button
+  async function recoverAccount() {
+    if (web3 === null || originalMessage === null || signedMessage === null) {
+      return;
+    }
+    // recover account from signature
+    const account = await web3.eth.personal.ecRecover(originalMessage, signedMessage);
+
+    setSigningAccount(account);
+  }
+
+  const [coin, setCoin] = useState('0')
+  const [receiver, setReceiver] = useState('')
+  const sendCoin = async () => {
+    if (!receiver) return
+    
+    const receipt = await web3?.eth.sendTransaction({
+      from: connectedAccount!,
+      to: receiver,
+      value: web3.utils.toWei(coin, 'ether')
+    })
+
+    console.log(receipt)
+  }
+
+  return (
+    <>
+      <div id="warn" style={{ color: 'red' }}>
+        {warning}
+      </div>
+      <div id="provider">{provider}</div>
+      <div id="chainId">{chainId}</div>
+      <div id="latestBlock">{latestBlock}</div>
+
+      <div id="connectedAccount">{connectedAccount}</div>
+      <div>
+        <Button
+          onPress={() => requestAccounts()}
+          id="requestAccounts"
+          disabled={accountButtonDisabled}
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          Request MetaMask Accounts
+        </Button>
+      </div>
+
+      <div>
+        <Input
+          onChange={e => {
+            setMessageToSign(e.target.value);
+          }}
+          id="messageToSign"
+          placeholder="Message to Sign"
+          disabled={connectedAccount === null}
+        />
+        <Button
+          onPress={() => signMessage()}
+          id="signMessage"
+          disabled={connectedAccount === null}
         >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          Sign Message
+        </Button>
+        <div id="signingResult">{signingResult}</div>
+      </div>
+
+      <div>
+        <Input
+          onChange={e => {
+            setOriginalMessage(e.target.value);
+          }}
+          id="originalMessage"
+          placeholder="Original Message"
+          disabled={connectedAccount === null}
+        />
+        <Input
+          onChange={e => {
+            setSignedMessage(e.target.value);
+          }}
+          id="signedMessage"
+          placeholder="Signed Message"
+          disabled={connectedAccount === null}
+        />
+        <Button
+          onPress={() => recoverAccount()}
+          id="recoverAccount"
+          disabled={connectedAccount === null}
         >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+          Recover Account
+        </Button>
+        <div id="signingAccount">{signingAccount}</div>
+      </div>
+
+      <div>
+        <Input
+          value={receiver}
+          onValueChange={setReceiver}
+          placeholder="receiver account"
+          disabled={connectedAccount === null}
+        />
+        <Input
+          type='number'
+          value={coin}
+          onValueChange={setCoin}
+          placeholder="send value"
+          disabled={connectedAccount === null}
+        />
+        <Button onPress={sendCoin}>Send</Button>
+      </div>
+
+
+
+    </>
   );
 }
